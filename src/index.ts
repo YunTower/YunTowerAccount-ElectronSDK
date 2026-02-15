@@ -2,6 +2,90 @@
  * YunTower Account Electron SDK
  */
 
+export interface ApiResponseBody {
+  code?: number;
+  msg?: string;
+  data?: unknown;
+}
+
+export class YunTowerAccountSDKError extends Error {
+  readonly status: number;
+  readonly responseBody: ApiResponseBody | string | null;
+  readonly apiCode?: number;
+  readonly apiMsg?: string;
+
+  constructor(
+    message: string,
+    status: number,
+    responseBody: ApiResponseBody | string | null,
+  ) {
+    super(message);
+    this.name = "YunTowerAccountSDKError";
+    this.status = status;
+    this.responseBody = responseBody;
+    if (
+      responseBody &&
+      typeof responseBody === "object" &&
+      "code" in responseBody
+    ) {
+      this.apiCode = responseBody.code;
+    }
+    if (
+      responseBody &&
+      typeof responseBody === "object" &&
+      "msg" in responseBody
+    ) {
+      this.apiMsg = responseBody.msg;
+    }
+    Object.setPrototypeOf(this, YunTowerAccountSDKError.prototype);
+  }
+
+  static format(err: unknown): string {
+    if (err instanceof YunTowerAccountSDKError) {
+      const parts = [
+        `[YunTowerAccountSDKError] ${err.message}`,
+        `HTTP Status: ${err.status}`,
+      ];
+      if (err.apiMsg != null) parts.push(`API Msg: ${err.apiMsg}`);
+      if (err.apiCode != null) parts.push(`API Code: ${err.apiCode}`);
+      if (err.responseBody != null) {
+        parts.push(
+          "Response: " +
+            (typeof err.responseBody === "string"
+              ? err.responseBody
+              : JSON.stringify(err.responseBody, null, 2)),
+        );
+      }
+      return parts.join("\n");
+    }
+    if (err instanceof Error) return err.message;
+    return String(err);
+  }
+}
+
+function parseResponseBody(raw: string): ApiResponseBody | string | null {
+  if (!raw.trim()) return null;
+  try {
+    return JSON.parse(raw) as ApiResponseBody;
+  } catch {
+    return raw;
+  }
+}
+
+function createApiError(
+  status: number,
+  rawBody: string,
+): YunTowerAccountSDKError {
+  const responseBody = parseResponseBody(rawBody);
+  const msg =
+    responseBody &&
+    typeof responseBody === "object" &&
+    responseBody.msg
+      ? responseBody.msg
+      : `HTTP error! Status: ${status}`;
+  return new YunTowerAccountSDKError(msg, status, responseBody);
+}
+
 const ACCESS_TOKEN_MAX_EXPIRE = 12 * 24 * 3600;
 const REFRESH_TOKEN_MAX_EXPIRE = 24 * 24 * 3600;
 const AVATAR_MAX_SIZE = 15 * 1024 * 1024;
@@ -281,9 +365,15 @@ export class YunTowerAccountElectronSDK {
     );
     const result = res as { code?: number; msg?: string; data?: TokenData };
     if (result.code !== 0) {
-      throw new Error(result.msg || "换取 token 失败");
+      throw new YunTowerAccountSDKError(
+        result.msg ?? "换取 token 失败",
+        200,
+        result as ApiResponseBody,
+      );
     }
-    if (!result.data) throw new Error("换取 token 失败");
+    if (!result.data) {
+      throw new YunTowerAccountSDKError("换取 token 失败", 200, result as ApiResponseBody);
+    }
     return result.data;
   }
 
@@ -301,7 +391,7 @@ export class YunTowerAccountElectronSDK {
     }
   }
 
-  /** 发起 JSON POST/GET 请求并返回解析后的 JSON */
+  /** 统一请求 */
   private async _fetch(
     url: string,
     method: "GET" | "POST",
@@ -314,8 +404,11 @@ export class YunTowerAccountElectronSDK {
     };
     if (method === "POST") opt.body = JSON.stringify(data);
     const response = await fetch(url, opt);
-    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-    return response.json();
+    const rawBody = await response.text();
+    if (!response.ok) {
+      throw createApiError(response.status, rawBody);
+    }
+    return rawBody ? (parseResponseBody(rawBody) as ApiResponseBody) : null;
   }
 
   /**
@@ -480,8 +573,11 @@ export class YunTowerAccountElectronSDK {
       method: "POST",
       body: form,
     });
-    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-    return response.json();
+    const rawBody = await response.text();
+    if (!response.ok) {
+      throw createApiError(response.status, rawBody);
+    }
+    return parseResponseBody(rawBody) ?? null;
   }
 }
 
