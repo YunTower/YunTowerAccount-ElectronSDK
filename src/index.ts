@@ -43,14 +43,11 @@ export class YunTowerAccountSDKError extends Error {
   static format(err: unknown): string {
     if (err instanceof YunTowerAccountSDKError) {
       const parts = [
-        `[YunTowerAccountSDKError] ${err.message}`,
-        `HTTP Status: ${err.status}`,
+        `[YunTowerAccountSDK] Error ${err.message}`,
       ];
-      if (err.apiMsg != null) parts.push(`API Msg: ${err.apiMsg}`);
-      if (err.apiCode != null) parts.push(`API Code: ${err.apiCode}`);
       if (err.responseBody != null) {
         parts.push(
-          "Response: " +
+          "[YunTowerAccountSDK] Response " +
             (typeof err.responseBody === "string"
               ? err.responseBody
               : JSON.stringify(err.responseBody, null, 2)),
