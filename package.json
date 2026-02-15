@@ -1,7 +1,7 @@
 {
   "name": "@yuntower/yuntower-account-electron-sdk",
   "description": "YunTower Account Electron SDK",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": false,
   "author": "yuntower",
   "license": "Apache-2.0",
